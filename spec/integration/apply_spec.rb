@@ -125,6 +125,7 @@ describe "apply" do
       end
 
       it 'succeeds when run twice' do
+        puts config_flags
         result = run_cli_json(%w[plan run prep] + config_flags)
         expect(result).not_to include('kind')
         expect(result.count).to eq(1)
