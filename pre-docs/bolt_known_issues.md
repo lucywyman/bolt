@@ -2,6 +2,10 @@
 
 Known issues for the Bolt 1.x release series.
 
+## Docker transport does not correctly set executable permission for files
+
+When copying shared files listed with the `files` metadata key for a task the docker transport does not maintain the execute permissions. This causes any task that attempts to execute a script listed in `files` to fail.
+
 ## False errors for SSH Keys generated with ssh-keygen OpenSSH 7.8 and later
 
 The OpenSSH 7.8 release introduced a change to SSH key generation. It now generates private keys with its own format rather than the OpenSSL PEM format. Because the Bolt SSH implementation assumes any key that uses the OpenSSH format uses the public-key signature system ed25519, false errors have resulted. For example:
