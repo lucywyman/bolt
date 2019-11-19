@@ -8,6 +8,7 @@ require 'open3'
 require 'bolt/error'
 require 'bolt/task'
 require 'bolt/apply_result'
+require 'bolt/apply_target'
 require 'bolt/util/puppet_log_level'
 
 module Bolt
@@ -129,6 +130,49 @@ module Bolt
       JSON.parse(out)
     end
 
+    def future_compile(target, catalog_input)
+      trusted = Puppet::Context::TrustedInformation.new('local', target.name, {})
+      catalog_input[:target] = {
+        name: target.name,
+        facts: @inventory.facts(target).merge('bolt' => true),
+        vars: @inventory.vars(target),
+        trusted: trusted.to_h
+      }
+      # rubocop:disable Style/GlobalVars
+      catalog_input[:future] = $future
+      # rubocop:enable Style/GlobalVars
+
+      bolt_catalog_exe = File.join(libexec, 'bolt_catalog')
+      old_path = ENV['PATH']
+      ENV['PATH'] = "#{RbConfig::CONFIG['bindir']}#{File::PATH_SEPARATOR}#{old_path}"
+      out, err, stat = Open3.capture3('ruby', bolt_catalog_exe, 'compile', stdin_data: catalog_input.to_json)
+      ENV['PATH'] = old_path
+
+      # stderr may contain formatted logs from Puppet's logger or other errors.
+      # Print them in order, but handle them separately. Anything not a formatted log is assumed
+      # to be an error message.
+      logs = err.lines.map do |l|
+        begin
+          JSON.parse(l)
+        rescue StandardError
+          l
+        end
+      end
+      logs.each do |log|
+        if log.is_a?(String)
+          @logger.error(log.chomp)
+        else
+          log.map { |k, v| [k.to_sym, v] }.each do |level, msg|
+            bolt_level = Bolt::Util::PuppetLogLevel::MAPPING[level]
+            @logger.send(bolt_level, "#{target.name}: #{msg.chomp}")
+          end
+        end
+      end
+
+      raise(ApplyError, target.name) unless stat.success?
+      JSON.parse(out)
+    end
+
     def validate_hiera_config(hiera_config)
       if File.exist?(File.path(hiera_config))
         data = File.open(File.path(hiera_config), "r:UTF-8") { |f| YAML.safe_load(f.read, [Symbol]) }
@@ -155,13 +199,20 @@ module Bolt
         options = args[1].map { |k, v| [k.sub(/^_/, '').to_sym, v] }.to_h
       end
 
-      # collect plan vars and merge them over target vars
       plan_vars = scope.to_hash(true, true)
       %w[trusted server_facts facts].each { |k| plan_vars.delete(k) }
 
       targets = @inventory.get_targets(args[0])
 
-      apply_ast(apply_body, targets, options, plan_vars)
+      # rubocop:disable Style/GlobalVars
+      if $future
+        Puppet.override(bolt_inventory: 'apply') do
+          apply_ast(apply_body, targets, options, plan_vars)
+        end
+      else
+        apply_ast(apply_body, targets, options, plan_vars)
+      end
+      # rubocop:enable Style/GlobalVars
     end
 
     # Count the number of top-level statements in the AST.
@@ -179,11 +230,64 @@ module Bolt
     def apply_ast(raw_ast, targets, options, plan_vars = {})
       ast = Puppet::Pops::Serialization::ToDataConverter.convert(raw_ast, rich_data: true, symbol_to_string: true)
 
+      # rubocop:disable Style/GlobalVars
+      if $future
+        %w[result resultset applyresult].each do |type|
+          Puppet.lookup(:loaders).private_environment_loader.load(:type, type)
+        end
+        # Collect target options to be serialized to the catalog for
+        # ApplyTarget to pick up
+        target_vars = plan_vars.select { |_, var| var.is_a?(Bolt::Target2) } || {}
+
+        target_opts = target_vars.transform_values do |v|
+          v.to_h.select do |k|
+            Bolt::ApplyTarget::COMPUTED.map(&:to_s).include?(k)
+          end
+        end
+
+        result_vars = plan_vars.select { |_, var| var.is_a?(Bolt::Result) }
+        result_vars.transform_values! do |v|
+          v.target.to_h.select do |k|
+            Bolt::ApplyTarget::COMPUTED.map(&:to_s).include?(k)
+          end
+        end
+        target_opts.merge!(result_vars)
+
+        result_set_vars = plan_vars.select { |_, var| var.is_a?(Bolt::ResultSet) }
+        result_set_vars.transform_values! do |v|
+          v.targets.each_with_object({}) do |target, acc|
+            acc[target.name] = target.to_h.select do |k|
+              Bolt::ApplyTarget::COMPUTED.map(&:to_s).include?(k)
+            end
+          end
+        end
+        target_opts.merge!(result_set_vars)
+        # target_opts = { varname => { protocol => 'ssh' }, resultset => { targetname => { protocol => 'ssh' }}}
+
+        # Serialize as pcore for *Result* objects
+        plan_vars = Puppet::Pops::Serialization::ToDataConverter.convert(plan_vars,
+                                                                         rich_data: true,
+                                                                         symbol_as_string: true,
+                                                                         type_by_reference: true,
+                                                                         local_reference: false)
+        scope = {
+          code_ast: ast,
+          modulepath: @modulepath,
+          pdb_config: @pdb_client.config.to_hash,
+          hiera_config: @hiera_config,
+          plan_vars: plan_vars,
+          target_opts: target_opts
+        }
+      end
+      # rubocop:enable Style/GlobalVars
+
       r = @executor.log_action('apply catalog', targets) do
         futures = targets.map do |target|
           Concurrent::Future.execute(executor: @pool) do
             @executor.with_node_logging("Compiling manifest block", [target]) do
-              compile(target, ast, plan_vars)
+              # rubocop:disable Style/GlobalVars
+              $future ? future_compile(target, scope) : compile(target, ast, plan_vars)
+              # rubocop:enable Style/GlobalVars
             end
           end
         end

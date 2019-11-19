@@ -241,8 +241,8 @@ describe "Bolt::CLI" do
 
       it "reads from stdin when --targets is '-'" do
         nodes = <<~'NODES'
-         foo
-         bar
+          foo
+          bar
         NODES
         cli = Bolt::CLI.new(%w[command run uptime --targets -])
         allow(STDIN).to receive(:read).and_return(nodes)

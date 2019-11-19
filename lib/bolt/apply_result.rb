@@ -85,6 +85,19 @@ module Bolt
       end
     end
 
+    def self._pcore_init_from_hash(init_hash); end
+
+    def _pcore_init_from_hash(init_hash)
+      opts = init_hash.reject { |k, _| k == 'target' }
+      initialize(init_hash['target'], opts.transform_keys(&:to_sym))
+    end
+
+    def _pcore_init_hash
+      { 'target' => @target,
+        'error' => value['_error'],
+        'report' => value['report'] }
+    end
+
     def initialize(target, error: nil, report: nil)
       @target = target
       @value = {}

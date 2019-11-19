@@ -2,11 +2,15 @@
 
 Puppet::DataTypes.create_type('Target') do
   begin
+    # Making target.new error cleanly inside apply blocks will probably also rely on this
     inventory = Puppet.lookup(:bolt_inventory)
-    inventory_version = inventory.version
-    if inventory_version != 1
-      target_implementation_class = inventory.target_implementation_class
-    end
+
+    inventory_version = inventory.version if defined? inventory.version
+    target_implementation_class = if inventory == 'apply'
+                                    Bolt::ApplyTarget
+                                  elsif inventory_version != 1
+                                    inventory.target_implementation_class
+                                  end
   rescue Puppet::Context::UndefinedBindingError
     inventory_version = 1
   end
@@ -33,15 +37,15 @@ Puppet::DataTypes.create_type('Target') do
       attributes => {
         uri => { type => Optional[String[1]], kind => given_or_derived },
         name => { type => Optional[String[1]] , kind => given_or_derived },
+        safe_name => { type =>  String[1], kind => given_or_derived },
         target_alias => { type => Optional[Variant[String[1], Array[String[1]]]], kind => given_or_derived },
         config => { type => Optional[Hash[String[1], Data]], kind => given_or_derived },
-        vars => { type => Optional[Hash[String[1], Data]], kind => given_or_derived  },
-        facts => { type => Optional[Hash[String[1], Data]], kind => given_or_derived  },
+        vars => { type => Optional[Hash[String[1], Data]], kind => given_or_derived },
+        facts => { type => Optional[Hash[String[1], Data]], kind => given_or_derived },
         features => { type => Optional[Array[String[1]]], kind => given_or_derived },
-        plugin_hooks => { type => Optional[Hash[String[1], Data]], kind => given_or_derived  }
+        plugin_hooks => { type => Optional[Hash[String[1], Data]], kind => given_or_derived }
       },
       functions => {
-        safe_name => Callable[[], String[1]],
         host => Callable[[], Optional[String]],
         password => Callable[[], Optional[String[1]]],
         port => Callable[[], Optional[Integer]],
