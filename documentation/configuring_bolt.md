@@ -12,11 +12,15 @@ Bolt config uses the following precedence, from highest precedence (cannot be ov
 - SSH config file options (`~/.ssh/config`, if using SSH)
 
 -   **[Project directories](bolt_project_directories.md#)**  
+
  Bolt runs in the context of a project directory or a `Boltdir`. This directory contains all of the configuration, code, and data loaded by Bolt.
 -   **[Bolt configuration options](bolt_configuration_options.md)**  
+
 Your Bolt configuration file can contain global and transport options.
 -   **[Using Bolt with Puppet Enterprise](bolt_configure_orchestrator.md)**  
+
 If you're a Puppet Enterprise (PE) customer, you can configure Bolt to use the PE orchestrator and perform actions on managed nodes. Pairing PE with Bolt enables role-based access control, logging, and visual reports in the PE console.
 -   **[Connecting Bolt to PuppetDB](bolt_connect_puppetdb.md)**  
+
 Configure Bolt to connect to PuppetDB.
 
