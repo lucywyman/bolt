@@ -356,7 +356,7 @@ module Bolt
         return 0
       end
 
-      message = 'There may be processes left executing on some targets.'
+      message = 'There may be processes left executing on some targets'
 
       if %w[task plan].include?(options[:subcommand]) && options[:task_options] && !options[:params_parsed] && pal
         options[:task_options] = pal.parse_params(options[:subcommand], options[:object], options[:task_options])
