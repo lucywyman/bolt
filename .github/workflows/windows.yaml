@@ -101,4 +101,4 @@ jobs:
         run: '& scripts\ci.ps1'
       - name: Run tests
         shell: powershell
-        run: bundle exec rake ci:windows:agentless
+        run: bundle exec rspec spec/integration/transport/local_spec.rb
