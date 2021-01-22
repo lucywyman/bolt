@@ -3,10 +3,10 @@
 require 'bolt/util'
 
 # Wait until all targets accept connections. This function allows a plan execution to wait for a customizable
-# amount of time via wait_time option until a target connection can be reestablished. The plan will proceed to
-# the next step if the connection fails to reconnect in the time specified (default: 120 seconds). A typical
-# use case for this function is the remote host being reboot as part of the plan execution.
-#
+# amount of time via the `wait_time` option until a target connection can be reestablished. The plan proceeds
+# to the next step if the connection fails to reconnect in the time specified (default: 120 seconds). A typical
+# use case for this function is if your plan reboots a remote host and the plan needs to wait for the host to reconnect
+# before it continues to the next step.
 #
 # > **Note:** Not available in apply block
 Puppet::Functions.create_function(:wait_until_available) do
